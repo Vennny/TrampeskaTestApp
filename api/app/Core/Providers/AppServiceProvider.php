@@ -1,7 +1,9 @@
 <?php
 
-namespace App\Providers;
+namespace App\Core\Providers;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Support\DateFactory;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        DateFactory::use(CarbonImmutable::class);
     }
 
     /**
