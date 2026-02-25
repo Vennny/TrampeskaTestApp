@@ -128,7 +128,7 @@ final class ContactRequestFilter
             ],
             self::FIELD_EMAIL => [
                 $sometimesPresent,
-                Email::default()->rfcCompliant(),
+                Email::default()->rfcCompliant()->validateMxRecord(),
                 'max:' . self::LIMIT_EMAIL,
             ],
             self::FIELD_PHONE => [
