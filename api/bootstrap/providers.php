@@ -1,5 +1,6 @@
 <?php
 
 return [
-    App\Core\Providers\AppServiceProvider::class,
+    App\Ship\Providers\AppServiceProvider::class,
+    App\Ship\Providers\ContainersServiceProvider::class,
 ];

@@ -1,6 +1,8 @@
 <?php
 
-namespace App\Core\Providers;
+declare(strict_types=1);
+
+namespace App\Ship\Providers;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\DateFactory;

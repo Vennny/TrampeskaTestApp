@@ -39,6 +39,13 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - blueghost
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 3067:8080
+    networks:
+      - blueghost
 
 networks:
   blueghost:
