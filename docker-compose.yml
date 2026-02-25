@@ -40,14 +40,6 @@ services:
     networks:
       - blueghost
 
-  adminer:
-    image: adminer
-    restart: always
-    ports:
-      - 3067:8080
-    networks:
-      - blueghost
-
   frontend:
     build:
       context: ./frontend
