@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Editace kontaktu.">
+    <title>Kontakt – Editace</title>
+</head>
+<body>
+
+<h1 id="page-heading">Načítání...</h1>
+<p><a href="index.html">« Zpět na seznam</a></p>
+
+<ul id="error-list" style="color:red; display:none;"></ul>
+
+<form id="contact-form">
+    <table border="0" cellpadding="6">
+        <tr>
+            <td><label for="first_name">Jméno *</label></td>
+            <td>
+                <input type="text" id="first_name" name="first_name" required>
+                <span class="field-error" id="err-first_name" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="last_name">Příjmení *</label></td>
+            <td>
+                <input type="text" id="last_name" name="last_name" required>
+                <span class="field-error" id="err-last_name" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="email">E-mail *</label></td>
+            <td>
+                <input type="email" id="email" name="email" required>
+                <span class="field-error" id="err-email" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="phone">Telefon</label></td>
+            <td>
+                <input type="tel" id="phone" name="phone" placeholder="+420777123456">
+                <span class="field-error" id="err-phone" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="note">Poznámka</label></td>
+            <td>
+                <textarea id="note" name="note" rows="5" cols="40"></textarea>
+                <span class="field-error" id="err-note" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2">
+                <button type="submit">Uložit</button>
+                <span id="form-success" style="color:green;"></span>
+            </td>
+        </tr>
+    </table>
+</form>
+
+<hr>
+<button onclick="deleteContact()">Smazat kontakt</button>
+
+<script>
+    const API_BASE  = 'http://localhost:8080/api';
+    const params    = new URLSearchParams(window.location.search);
+    const contactId = params.get('id');
+
+    async function loadContact() {
+        const res = await fetch(`${API_BASE}/contacts/${contactId}`, {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (res.status === 404) {
+            document.getElementById('page-heading').textContent = 'Kontakt nenalezen';
+            document.getElementById('contact-form').style.display = 'none';
+            return;
+        }
+
+        const contact  = await res.json();
+        const fullName = `${contact.first_name} ${contact.last_name}`;
+        document.title = `${fullName} – Editace`;
+        document.getElementById('page-heading').textContent = `Upravit: ${fullName}`;
+
+        document.getElementById('first_name').value = contact.first_name ?? '';
+        document.getElementById('last_name').value  = contact.last_name  ?? '';
+        document.getElementById('email').value      = contact.email      ?? '';
+        document.getElementById('phone').value      = contact.phone      ?? '';
+        document.getElementById('note').value       = contact.note       ?? '';
+    }
+
+    document.getElementById('contact-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        clearErrors();
+
+        const payload = {
+            first_name: document.getElementById('first_name').value,
+            last_name:  document.getElementById('last_name').value,
+            email:      document.getElementById('email').value,
+            phone:      document.getElementById('phone').value,
+            note:       document.getElementById('note').value,
+        };
+
+        const res = await fetch(`${API_BASE}/contacts/${contactId}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body:    JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+            const updated  = await res.json();
+            const fullName = `${updated.first_name} ${updated.last_name}`;
+            document.title = `${fullName} – Editace`;
+            document.getElementById('page-heading').textContent = `Upravit: ${fullName}`;
+            document.getElementById('form-success').textContent = 'Uloženo.';
+        } else {
+            const err = await res.json();
+            showErrors(err.errors ?? {});
+        }
+    });
+
+    async function deleteContact() {
+        if (!confirm('Opravdu chcete smazat tento kontakt?')) return;
+
+        const res = await fetch(`${API_BASE}/contacts/${contactId}`, {
+            method:  'DELETE',
+            headers: { 'Accept': 'application/json' },
+        });
+
+        if (res.ok || res.status === 204) {
+            window.location.href = 'index.html';
+        } else {
+            alert('Smazání se nezdařilo.');
+        }
+    }
+
+    function showErrors(errors) {
+        // Show per-field errors inline
+        Object.entries(errors).forEach(([field, messages]) => {
+            const el = document.getElementById(`err-${field}`);
+            if (el) el.textContent = messages.join(' ');
+        });
+
+        // Also show summary at top
+        const list = document.getElementById('error-list');
+        list.innerHTML = '';
+        list.style.display = 'block';
+        Object.values(errors).flat().forEach(msg => {
+            const li = document.createElement('li');
+            li.textContent = msg;
+            list.appendChild(li);
+        });
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+        const list = document.getElementById('error-list');
+        list.innerHTML = '';
+        list.style.display = 'none';
+        document.getElementById('form-success').textContent = '';
+    }
+
+    if (contactId) {
+        loadContact();
+    } else {
+        document.getElementById('page-heading').textContent = 'Chybí ID kontaktu';
+        document.getElementById('contact-form').style.display = 'none';
+    }
+</script>
+</body>
+</html>

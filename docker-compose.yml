@@ -39,11 +39,29 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - blueghost
+
   adminer:
     image: adminer
     restart: always
     ports:
       - 3067:8080
+    networks:
+      - blueghost
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - API_URL=http://nginx:80/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - nginx
     networks:
       - blueghost
 

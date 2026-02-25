@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Seznam všech kontaktů – přehled, vyhledávání a správa kontaktů.">
+    <title>Kontakty – Seznam</title>
+</head>
+<body>
+
+<h1>Seznam kontaktů</h1>
+
+<p><a href="create.html">+ Přidat nový kontakt</a></p>
+
+<table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+    <tr>
+        <th>Jméno</th>
+        <th>Příjmení</th>
+        <th>E-mail</th>
+        <th>Telefon</th>
+        <th>Poznámka</th>
+        <th>Akce</th>
+    </tr>
+    </thead>
+    <tbody id="contacts-tbody">
+    <tr><td colspan="6">Načítání...</td></tr>
+    </tbody>
+</table>
+
+<br>
+<div id="pagination"></div>
+
+<!-- Note modal -->
+<div id="note-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+    <div id="note-modal-box" style="background:#fff; margin:10% auto; padding:20px; max-width:500px; position:relative;">
+        <h3>Poznámka</h3>
+        <p id="note-modal-text"></p>
+        <button id="note-modal-close">Zavřít</button>
+    </div>
+</div>
+
+<script>
+    const API_BASE = 'http://localhost:8080/api';
+    const PER_PAGE = 10;
+
+    let currentPage = getPageFromUrl();
+
+    function getPageFromUrl() {
+        return parseInt(new URLSearchParams(window.location.search).get('page') || '1', 10);
+    }
+
+    function slugify(firstName, lastName, id) {
+        return `${firstName}-${lastName}-${id}`
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/-+/g, '-');
+    }
+
+    async function loadContacts(page) {
+        const tbody = document.getElementById('contacts-tbody');
+        tbody.innerHTML = '<tr><td colspan="6">Načítání...</td></tr>';
+
+        try {
+            const res  = await fetch(`${API_BASE}/contacts/?paginate=true&page=${page}&per_page=${PER_PAGE}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            const json = await res.json();
+            renderTable(json.items ?? []);
+            if (json._meta) renderPagination(json._meta);
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="6">Chyba při načítání: ${err.message}</td></tr>`;
+        }
+    }
+
+    function renderTable(contacts) {
+        const tbody = document.getElementById('contacts-tbody');
+        tbody.innerHTML = '';
+
+        if (!contacts.length) {
+            tbody.innerHTML = '<tr><td colspan="6">Žádné kontakty nenalezeny.</td></tr>';
+            return;
+        }
+
+        contacts.forEach(contact => {
+            const slug = slugify(contact.first_name, contact.last_name, contact.id);
+            const tr   = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escHtml(contact.first_name)}</td>
+                <td>${escHtml(contact.last_name)}</td>
+                <td><a href="mailto:${escHtml(contact.email)}">${escHtml(contact.email)}</a></td>
+                <td>${escHtml(contact.phone)}</td>
+                <td><button onclick="openNote('${escAttr(contact.note)}')">Zobrazit</button></td>
+                <td><a href="edit.html?id=${contact.id}&slug=${encodeURIComponent(slug)}">Upravit</a></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderPagination(meta) {
+        const container = document.getElementById('pagination');
+        container.innerHTML = '';
+        const { page, total_pages } = meta;
+
+        if (total_pages <= 1) return;
+
+        if (page > 1) {
+            const prev = document.createElement('a');
+            prev.href  = `?page=${page - 1}`;
+            prev.textContent = '« Předchozí';
+            prev.onclick = e => { e.preventDefault(); goToPage(page - 1); };
+            container.appendChild(prev);
+            container.appendChild(document.createTextNode(' '));
+        }
+
+        for (let i = 1; i <= total_pages; i++) {
+            if (i === page) {
+                const strong = document.createElement('strong');
+                strong.textContent = i;
+                container.appendChild(strong);
+            } else {
+                const a = document.createElement('a');
+                a.href  = `?page=${i}`;
+                a.textContent = i;
+                const p = i;
+                a.onclick = ev => { ev.preventDefault(); goToPage(p); };
+                container.appendChild(a);
+            }
+            container.appendChild(document.createTextNode(' '));
+        }
+
+        if (page < total_pages) {
+            const next = document.createElement('a');
+            next.href  = `?page=${page + 1}`;
+            next.textContent = 'Následující »';
+            next.onclick = e => { e.preventDefault(); goToPage(page + 1); };
+            container.appendChild(next);
+        }
+    }
+
+    function goToPage(page) {
+        currentPage = page;
+        history.pushState({ page }, '', `?page=${page}`);
+        loadContacts(page);
+    }
+
+    window.addEventListener('popstate', e => {
+        const page = e.state?.page || getPageFromUrl();
+        currentPage = page;
+        loadContacts(page);
+    });
+
+    function openNote(note) {
+        document.getElementById('note-modal-text').textContent = note || '(Bez poznámky)';
+        document.getElementById('note-modal').style.display = 'block';
+    }
+
+    function closeNote() {
+        document.getElementById('note-modal').style.display = 'none';
+    }
+
+    document.getElementById('note-modal-close').addEventListener('click', closeNote);
+    document.getElementById('note-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeNote();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeNote();
+    });
+
+    function escHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escAttr(str) {
+        return String(str ?? '').replace(/'/g, "\\'");
+    }
+
+    loadContacts(currentPage);
+</script>
+</body>
+</html>

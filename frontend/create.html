@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Vytvoření nového kontaktu.">
+    <title>Nový kontakt</title>
+</head>
+<body>
+
+<h1>Nový kontakt</h1>
+<p><a href="index.html">« Zpět na seznam</a></p>
+
+<ul id="error-list" style="color:red; display:none;"></ul>
+
+<form id="contact-form">
+    <table border="0" cellpadding="6">
+        <tr>
+            <td><label for="first_name">Jméno *</label></td>
+            <td>
+                <input type="text" id="first_name" name="first_name" required>
+                <span class="field-error" id="err-first_name" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="last_name">Příjmení *</label></td>
+            <td>
+                <input type="text" id="last_name" name="last_name" required>
+                <span class="field-error" id="err-last_name" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="email">E-mail *</label></td>
+            <td>
+                <input type="email" id="email" name="email" required>
+                <span class="field-error" id="err-email" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="phone">Telefon</label></td>
+            <td>
+                <input type="tel" id="phone" name="phone" placeholder="+420777123456">
+                <span class="field-error" id="err-phone" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td><label for="note">Poznámka</label></td>
+            <td>
+                <textarea id="note" name="note" rows="5" cols="40"></textarea>
+                <span class="field-error" id="err-note" style="color:red;"></span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2">
+                <button type="submit">Vytvořit kontakt</button>
+                <span id="form-success" style="color:green;"></span>
+            </td>
+        </tr>
+    </table>
+</form>
+
+<script>
+    const API_BASE = 'http://localhost:8080/api';
+
+    document.getElementById('contact-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        clearErrors();
+
+        const payload = {
+            first_name: document.getElementById('first_name').value,
+            last_name:  document.getElementById('last_name').value,
+            email:      document.getElementById('email').value,
+            phone:      document.getElementById('phone').value,
+            note:       document.getElementById('note').value,
+        };
+
+        const res = await fetch(`${API_BASE}/contacts/`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body:    JSON.stringify(payload),
+        });
+
+        if (res.ok || res.status === 201) {
+            const contact  = await res.json();
+            document.getElementById('form-success').textContent = 'Kontakt byl vytvořen. Přesměrování...';
+            // Redirect to edit page after short delay
+            setTimeout(() => {
+                const slug = slugify(contact.first_name, contact.last_name, contact.id);
+                window.location.href = `edit.html?id=${contact.id}&slug=${encodeURIComponent(slug)}`;
+            }, 800);
+        } else {
+            const err = await res.json();
+            showErrors(err.errors ?? {});
+        }
+    });
+
+    function slugify(firstName, lastName, id) {
+        return `${firstName}-${lastName}-${id}`
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/-+/g, '-');
+    }
+
+    function showErrors(errors) {
+        Object.entries(errors).forEach(([field, messages]) => {
+            const el = document.getElementById(`err-${field}`);
+            if (el) el.textContent = messages.join(' ');
+        });
+
+        const list = document.getElementById('error-list');
+        list.innerHTML = '';
+        list.style.display = 'block';
+        Object.values(errors).flat().forEach(msg => {
+            const li = document.createElement('li');
+            li.textContent = msg;
+            list.appendChild(li);
+        });
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+        const list = document.getElementById('error-list');
+        list.innerHTML = '';
+        list.style.display = 'none';
+        document.getElementById('form-success').textContent = '';
+    }
+</script>
+</body>
+</html>
