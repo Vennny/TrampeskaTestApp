@@ -24,6 +24,8 @@ final class ContactApiTransformer extends ApiTransformer
 
     final public const string PROP_NOTE = Contact::ATTR_NOTE;
 
+    final public const string PROP_SLUG = Contact::ATTR_SLUG;
+
     final public const string PROP_CREATED_AT = Contact::ATTR_CREATED_AT;
 
     final public const string PROP_UPDATED_AT = Contact::ATTR_UPDATED_AT;
@@ -42,6 +44,7 @@ final class ContactApiTransformer extends ApiTransformer
             self::PROP_EMAIL => $contact->getEmail(),
             self::PROP_PHONE => $contact->getPhone(),
             self::PROP_NOTE => $contact->getNote(),
+            self::PROP_SLUG => $contact->getSlug(),
             self::PROP_CREATED_AT => $this->formatDateTime($contact->getCreatedAt()),
             self::PROP_UPDATED_AT => $this->formatDateTime($contact->getUpdatedAt()),
         ];

@@ -25,6 +25,22 @@ function fieldError(errors, field) {
     return `<span style="color:red">${escHtml(errors[field][0])}</span>`;
 }
 
+function slugify(firstName, lastName, id) {
+    return `${firstName}-${lastName}-${id}`
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+
+function getIdFromSlug(slug) {
+    const parts = slug.split('-');
+    const id    = parts[parts.length - 1];
+    return isNaN(id) ? null : id;
+}
+
 function layout(title, metaDesc, body) {
     return `<!DOCTYPE html>
 <html lang="cs">
@@ -45,18 +61,11 @@ function paginationHtml(meta, perPage) {
     const page        = parseInt(meta.page, 10);
     const total_pages = parseInt(meta.total_pages, 10);
 
-    // Build set of page numbers to show: first, last, current and 2 adjacent, ellipsis elsewhere
-    const show = new Set();
-    show.add(1);
-    show.add(total_pages);
+    const show = new Set([1, total_pages]);
     for (let i = Math.max(1, page - 2); i <= Math.min(total_pages, page + 2); i++) show.add(i);
-
     const sorted = [...show].sort((a, b) => a - b);
 
-    let html = '';
-
-    // Per-page selector
-    html += `<form method="GET" action="/" style="display:inline">
+    let html = `<form method="GET" action="/" style="display:inline">
         <input type="hidden" name="page" value="1">
         Na stránce:
         <select name="per_page" onchange="this.form.submit()">
@@ -66,22 +75,17 @@ function paginationHtml(meta, perPage) {
 
     if (total_pages <= 1) return html + `<strong>[1]</strong>`;
 
-    // Prev
     if (page > 1) html += `<a href="/?page=${page - 1}&per_page=${perPage}">« Předchozí</a> `;
 
-    // Page numbers with ellipsis
     let prev = 0;
     for (const p of sorted) {
         if (prev && p - prev > 1) html += `<span>...</span> `;
-        if (p === page) {
-            html += `<strong>[${p}]</strong> `;
-        } else {
-            html += `<a href="/?page=${p}&per_page=${perPage}">${p}</a> `;
-        }
+        html += p === page
+            ? `<strong>[${p}]</strong> `
+            : `<a href="/?page=${p}&per_page=${perPage}">${p}</a> `;
         prev = p;
     }
 
-    // Next
     if (page < total_pages) html += `<a href="/?page=${page + 1}&per_page=${perPage}">Následující »</a>`;
 
     return html;
@@ -92,21 +96,25 @@ function paginationHtml(meta, perPage) {
 // -------------------------------------------------------
 app.get('/', async (req, res) => {
     const page    = parseInt(req.query.page    || '1',  10);
-    const perPage = parseInt(req.query.per_page || '10', 10);    const apiRes  = await fetch(`${API_URL}/contacts/?paginate=true&page=${page}&per_page=${perPage}`, {
+    const perPage = parseInt(req.query.per_page || '10', 10);
+    const apiRes  = await fetch(`${API_URL}/contacts/?paginate=true&page=${page}&per_page=${perPage}`, {
         headers: { 'Accept': 'application/json' }
     });
     const data     = await apiRes.json();
     const contacts = data.items ?? [];
 
-    const rows = contacts.map(c => `
+    const rows = contacts.map(c => {
+        const slug = c.slug || slugify(c.first_name, c.last_name, c.id);
+        return `
         <tr>
             <td>${escHtml(c.first_name)}</td>
             <td>${escHtml(c.last_name)}</td>
             <td><a href="mailto:${escHtml(c.email)}">${escHtml(c.email)}</a></td>
             <td>${escHtml(c.phone)}</td>
             <td><button onclick="openNote('${escHtml(c.note ?? '')}')">Zobrazit</button></td>
-            <td><a href="/${c.id}">Upravit</a></td>
-        </tr>`).join('');
+            <td><a href="/${slug}">Upravit</a></td>
+        </tr>`;
+    }).join('');
 
     const body = `
 <h1>Seznam kontaktů</h1>
@@ -169,11 +177,11 @@ ${renderErrors(errors)}
             ${fieldError(errors, 'last_name')}
         </td></tr>
         <tr><td><label>E-mail *</label></td><td>
-            <input type="email" name="email" value="${escHtml(old.email)}" required>
+            <input type="text" name="email" value="${escHtml(old.email)}" required>
             ${fieldError(errors, 'email')}
         </td></tr>
-        <tr><td><label>Telefon *</label></td><td>
-            <input type="tel" name="phone" value="${escHtml(old.phone)}" required placeholder="+420777123456">
+        <tr><td><label>Telefon</label></td><td>
+            <input type="text" name="phone" value="${escHtml(old.phone)}" required placeholder="+420777123456">
             ${fieldError(errors, 'phone')}
         </td></tr>
         <tr><td><label>Poznámka</label></td><td>
@@ -204,12 +212,13 @@ app.post('/novy-kontakt', async (req, res) => {
 });
 
 // -------------------------------------------------------
-// GET /:id — Edit form
+// GET /:slug — Edit form
 // -------------------------------------------------------
-app.get('/:id', async (req, res, next) => {
-    if (isNaN(req.params.id)) return next();
+app.get('/:slug', async (req, res, next) => {
+    const id = getIdFromSlug(req.params.slug);
+    if (!id) return next();
 
-    const apiRes = await fetch(`${API_URL}/contacts/${req.params.id}`, {
+    const apiRes = await fetch(`${API_URL}/contacts/${id}`, {
         headers: { 'Accept': 'application/json' }
     });
 
@@ -217,20 +226,27 @@ app.get('/:id', async (req, res, next) => {
         return res.status(404).send(layout('Nenalezeno', 'Kontakt nenalezen.', '<h1>Kontakt nenalezen</h1><p><a href="/">Zpět</a></p>'));
     }
 
-    const contact = await apiRes.json();
+    const contact       = await apiRes.json();
+    const canonicalSlug = contact.slug || slugify(contact.first_name, contact.last_name, contact.id);
+
+    // 301 redirect if slug is outdated (e.g. name changed)
+    if (req.params.slug !== canonicalSlug) {
+        return res.redirect(301, `/${canonicalSlug}`);
+    }
+
     res.send(layout(
         `${contact.first_name} ${contact.last_name} – Editace`,
         `Editace kontaktu ${contact.first_name} ${contact.last_name}.`,
-        editForm(req.params.id, contact)
+        editForm(canonicalSlug, contact)
     ));
 });
 
-function editForm(id, old = {}, errors = {}) {
+function editForm(slug, old = {}, errors = {}) {
     return `
 <h1>Upravit: ${escHtml(old.first_name)} ${escHtml(old.last_name)}</h1>
 <p><a href="/">« Zpět na seznam</a></p>
 ${renderErrors(errors)}
-<form method="POST" action="/${id}">
+<form method="POST" action="/${slug}">
     <table border="0" cellpadding="6">
         <tr><td><label>Jméno *</label></td><td>
             <input type="text" name="first_name" value="${escHtml(old.first_name)}" required>
@@ -241,52 +257,52 @@ ${renderErrors(errors)}
             ${fieldError(errors, 'last_name')}
         </td></tr>
         <tr><td><label>E-mail *</label></td><td>
-            <input type="email" name="email" value="${escHtml(old.email)}" required>
+            <input type="text" name="email" value="${escHtml(old.email)}" required>
             ${fieldError(errors, 'email')}
         </td></tr>
-        <tr><td><label>Telefon *</label></td><td>
-            <input type="tel" name="phone" value="${escHtml(old.phone)}" required placeholder="+420777123456">
+        <tr><td><label>Telefon</label></td><td>
+            <input type="text" name="phone" value="${escHtml(old.phone)}" required placeholder="+420777123456">
             ${fieldError(errors, 'phone')}
         </td></tr>
         <tr><td><label>Poznámka</label></td><td>
             <textarea name="note" rows="5" cols="40">${escHtml(old.note)}</textarea>
             ${fieldError(errors, 'note')}
         </td></tr>
-        <tr><td colspan="2">
-            <button type="submit">Uložit</button>
-        </td></tr>
+        <tr><td colspan="2"><button type="submit">Uložit</button></td></tr>
     </table>
 </form>
 <hr>
-<form method="POST" action="/smazat/${id}" onsubmit="return confirm('Opravdu smazat?')">
+<form method="POST" action="/smazat/${getIdFromSlug(slug)}" onsubmit="return confirm('Opravdu smazat?')">
     <button type="submit">Smazat kontakt</button>
 </form>`;
 }
 
 // -------------------------------------------------------
-// POST /:id — Edit submit
+// POST /:slug — Edit submit
 // -------------------------------------------------------
-app.post('/:id', async (req, res, next) => {
-    if (isNaN(req.params.id)) return next();
+app.post('/:slug', async (req, res, next) => {
+    const id = getIdFromSlug(req.params.slug);
+    if (!id) return next();
 
-    const apiRes = await fetch(`${API_URL}/contacts/${req.params.id}`, {
+    const apiRes = await fetch(`${API_URL}/contacts/${id}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body:    JSON.stringify(req.body),
     });
 
     if (apiRes.ok) {
-        return res.redirect(302, `/${req.params.id}`);
+        const updated       = await apiRes.json();
+        const canonicalSlug = updated.slug || slugify(updated.first_name, updated.last_name, updated.id);
+        return res.redirect(302, `/${canonicalSlug}`);
     }
 
-    const err     = await apiRes.json();
-    const errors  = err.errors ?? {};
-    const contact = await fetch(`${API_URL}/contacts/${req.params.id}`, { headers: { 'Accept': 'application/json' } }).then(r => r.json()).catch(() => req.body);
+    const err    = await apiRes.json();
+    const errors = err.errors ?? {};
 
     res.status(422).send(layout(
-        `Editace – Chyba`,
-        `Editace kontaktu.`,
-        editForm(req.params.id, { ...contact, ...req.body }, errors)
+        'Editace – Chyba',
+        'Editace kontaktu.',
+        editForm(req.params.slug, req.body, errors)
     ));
 });
 

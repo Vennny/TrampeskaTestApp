@@ -32,6 +32,8 @@ final class Contact extends Model
 
     final public const string ATTR_NOTE = 'note';
 
+    final public const string ATTR_SLUG = 'slug';
+
     final public const string ATTR_CREATED_AT = self::CREATED_AT;
 
     final public const string ATTR_UPDATED_AT = self::UPDATED_AT;
@@ -66,6 +68,7 @@ final class Contact extends Model
         self::ATTR_EMAIL,
         self::ATTR_PHONE,
         self::ATTR_NOTE,
+        self::ATTR_SLUG,
     ];
 
     /**
@@ -79,6 +82,7 @@ final class Contact extends Model
         self::ATTR_EMAIL => CastTypesEnum::STRING->value,
         self::ATTR_PHONE => CastTypesEnum::STRING->value,
         self::ATTR_NOTE => CastTypesEnum::STRING->value,
+        self::ATTR_SLUG => CastTypesEnum::STRING->value,
     ];
 
     /**
@@ -138,6 +142,14 @@ final class Contact extends Model
     public function getNote(): ?string
     {
         return $this->getAttributeValue(self::ATTR_NOTE);
+    }
+
+    /**
+     * @return string|null
+     */
+    public function getSlug(): ?string
+    {
+        return $this->getAttributeValue(self::ATTR_SLUG);
     }
 
     /**
